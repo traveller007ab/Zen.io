@@ -73,3 +73,10 @@ export interface Canvas {
   chat_history: ChatMessage[] | null;
   output_sources: Source[] | null;
 }
+
+export interface Memory {
+  id: string;
+  content: string;
+}
+
+export type SAFStatus = 'idle' | 'planning' | 'executing';

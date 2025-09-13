@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useReducer, ReactNode, useCallback, useEffect } from 'react';
-import { Canvas, ChatMessage, Source, CanvasPart, TextPart, ImagePart } from '../types';
+import { Canvas, ChatMessage, Source, CanvasPart, TextPart, ImagePart, SAFStatus } from '../types';
 import * as WorkspaceService from '../services/workspaceService';
+import * as MemoryService from '../services/memoryService';
 import { runGenerateStream, runConversationStream, runInlineActionStream, InlineAction } from '../services/geminiService';
 
 type SaveStatus = 'idle' | 'saving' | 'saved';
+type MemoryStatus = 'idle' | 'searching' | 'saving' | 'error';
 
 interface WorkspaceState {
   canvases: Canvas[];
@@ -12,6 +14,8 @@ interface WorkspaceState {
   isChatLoading: boolean; // For conversation
   isInlineLoading: boolean; // For inline actions
   saveStatus: SaveStatus;
+  memoryStatus: MemoryStatus;
+  safStatus: SAFStatus;
 }
 
 type WorkspaceAction =
@@ -23,7 +27,9 @@ type WorkspaceAction =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_CHAT_LOADING'; payload: boolean }
   | { type: 'SET_INLINE_LOADING'; payload: boolean }
-  | { type: 'SET_SAVE_STATUS'; payload: SaveStatus };
+  | { type: 'SET_SAVE_STATUS'; payload: SaveStatus }
+  | { type: 'SET_MEMORY_STATUS'; payload: MemoryStatus }
+  | { type: 'SET_SAF_STATUS'; payload: SAFStatus };
 
 const initialState: WorkspaceState = {
   canvases: [],
@@ -32,6 +38,8 @@ const initialState: WorkspaceState = {
   isChatLoading: false,
   isInlineLoading: false,
   saveStatus: 'idle',
+  memoryStatus: 'idle',
+  safStatus: 'idle',
 };
 
 const workspaceReducer = (state: WorkspaceState, action: WorkspaceAction): WorkspaceState => {
@@ -57,6 +65,10 @@ const workspaceReducer = (state: WorkspaceState, action: WorkspaceAction): Works
       return { ...state, isInlineLoading: action.payload };
     case 'SET_SAVE_STATUS':
       return { ...state, saveStatus: action.payload };
+    case 'SET_MEMORY_STATUS':
+        return { ...state, memoryStatus: action.payload };
+    case 'SET_SAF_STATUS':
+        return { ...state, safStatus: action.payload };
     default:
       return state;
   }
@@ -175,12 +187,26 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_LOADING', payload: true });
     dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, output: '', output_sources: [] }});
     
+    dispatch({ type: 'SET_MEMORY_STATUS', payload: 'searching' });
+    const queryText = activeCanvas.content.filter(p => p.type === 'text').map(p => p.content).join('\n');
+    const memories = await MemoryService.searchMemories(queryText);
+    const memoryContext = memories.map(m => m.content).join('\n---\n');
+    dispatch({ type: 'SET_MEMORY_STATUS', payload: 'idle' });
+
     let finalOutput = '';
     let finalSources: Source[] = [];
     try {
-      const stream = runGenerateStream(activeCanvas.content);
+      const stream = runGenerateStream(activeCanvas.content, memoryContext);
       for await (const event of stream) {
         const currentCanvas = state.canvases.find(c => c.id === state.activeCanvasId)!;
+        
+        if (event.safStatus) {
+            dispatch({ type: 'SET_SAF_STATUS', payload: event.safStatus });
+        }
+        if (event.toolCallMessage) {
+            finalOutput += `\n${event.toolCallMessage}\n`;
+            dispatch({ type: 'UPDATE_CANVAS', payload: { ...currentCanvas, output: finalOutput } });
+        }
         if (event.textChunk) {
           finalOutput += event.textChunk;
           dispatch({ type: 'UPDATE_CANVAS', payload: { ...currentCanvas, output: finalOutput }});
@@ -200,6 +226,7 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
        dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, output: finalOutput, output_sources: [] }});
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
+      dispatch({ type: 'SET_SAF_STATUS', payload: 'idle' });
       _updateCanvasDatabase(state.activeCanvasId, { output: finalOutput, output_sources: finalSources });
     }
   };
@@ -235,19 +262,26 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   
+  const commitToMemory = async (content: string) => {
+      dispatch({ type: 'SET_MEMORY_STATUS', payload: 'saving' });
+      await MemoryService.createMemory(content);
+      setTimeout(() => dispatch({ type: 'SET_MEMORY_STATUS', payload: 'idle' }), 2000);
+  };
+  
   const acceptOutput = () => {
       if(activeCanvas && activeCanvas.output) {
           const newPart: TextPart = { type: 'text', content: activeCanvas.output };
           const newContent = [newPart];
           dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, content: newContent } });
           _updateCanvasDatabase(activeCanvas.id, { content: newContent });
+          commitToMemory(activeCanvas.output);
       }
   };
 
   const appendOutput = () => {
       if(activeCanvas && activeCanvas.output) {
-          const newPart: TextPart = { type: 'text', content: activeCanvas.output };
-          addCanvasPart(activeCanvas.id, newPart);
+          addCanvasPart(activeCanvas.id, { type: 'text', content: `\n\n${activeCanvas.output}` });
+          commitToMemory(activeCanvas.output);
       }
   };
 

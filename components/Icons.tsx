@@ -47,7 +47,7 @@ export const DatabaseIcon: React.FC<{ className?: string }> = ({ className }) =>
 
 export const EmeraldMindIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5-10-5-10 5z"/>
+        <path d="M6 2L1 7v10l5 5h12l5-5V7l-5-5H6zm10.14 14.83L12 19l-4.14-2.17L5 12l2.86-4.83L12 5l4.14 2.17L19 12l-2.86 4.83z" />
     </svg>
 );
 
