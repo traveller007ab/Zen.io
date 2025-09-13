@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useReducer, ReactNode, useCallback, useEffect } from 'react';
-import { Canvas, ChatMessage, Source, CanvasPart, TextPart, ImagePart, SAFStatus } from '../types';
+import React, { createContext, useContext, useReducer, ReactNode, useCallback, useEffect, useRef } from 'react';
+import { Canvas, Source, CanvasPart, TextPart, SAFStatus, TaskLogEntry, ChatMessage } from '../types';
 import * as WorkspaceService from '../services/workspaceService';
 import * as MemoryService from '../services/memoryService';
-import { runGenerateStream, runConversationStream, runInlineActionStream, InlineAction } from '../services/geminiService';
+import { runGenerateStream, runInlineActionStream, InlineAction, runConversationStream } from '../services/geminiService';
+import { supabase } from '../services/supabaseClient';
+
 
 type SaveStatus = 'idle' | 'saving' | 'saved';
 type MemoryStatus = 'idle' | 'searching' | 'saving' | 'error';
@@ -11,8 +13,10 @@ interface WorkspaceState {
   canvases: Canvas[];
   activeCanvasId: string | null;
   isLoading: boolean; // For main generation
-  isChatLoading: boolean; // For conversation
+  isChatLoading: boolean; // For chat
   isInlineLoading: boolean; // For inline actions
+  isDeleting: boolean; // For delete confirmation
+  pendingDeletionCanvasId: string | null; // For two-stage delete
   saveStatus: SaveStatus;
   memoryStatus: MemoryStatus;
   safStatus: SAFStatus;
@@ -27,6 +31,9 @@ type WorkspaceAction =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_CHAT_LOADING'; payload: boolean }
   | { type: 'SET_INLINE_LOADING'; payload: boolean }
+  | { type: 'SET_DELETING'; payload: boolean }
+  | { type: 'INITIATE_DELETE'; payload: string }
+  | { type: 'CANCEL_DELETE' }
   | { type: 'SET_SAVE_STATUS'; payload: SaveStatus }
   | { type: 'SET_MEMORY_STATUS'; payload: MemoryStatus }
   | { type: 'SET_SAF_STATUS'; payload: SAFStatus };
@@ -37,6 +44,8 @@ const initialState: WorkspaceState = {
   isLoading: false,
   isChatLoading: false,
   isInlineLoading: false,
+  isDeleting: false,
+  pendingDeletionCanvasId: null,
   saveStatus: 'idle',
   memoryStatus: 'idle',
   safStatus: 'idle',
@@ -60,9 +69,15 @@ const workspaceReducer = (state: WorkspaceState, action: WorkspaceAction): Works
     case 'SET_LOADING':
       return { ...state, isLoading: action.payload };
     case 'SET_CHAT_LOADING':
-      return { ...state, isChatLoading: action.payload };
+        return { ...state, isChatLoading: action.payload };
     case 'SET_INLINE_LOADING':
       return { ...state, isInlineLoading: action.payload };
+    case 'SET_DELETING':
+      return { ...state, isDeleting: action.payload };
+    case 'INITIATE_DELETE':
+      return { ...state, pendingDeletionCanvasId: action.payload };
+    case 'CANCEL_DELETE':
+      return { ...state, pendingDeletionCanvasId: null };
     case 'SET_SAVE_STATUS':
       return { ...state, saveStatus: action.payload };
     case 'SET_MEMORY_STATUS':
@@ -76,9 +91,11 @@ const workspaceReducer = (state: WorkspaceState, action: WorkspaceAction): Works
 
 interface WorkspaceContextType extends WorkspaceState {
   activeCanvas: Canvas | undefined;
-  createCanvas: () => Promise<void>;
+  createCanvas: (name?: string, content?: CanvasPart[]) => Promise<Canvas | null>;
   selectCanvas: (id: string) => void;
   deleteCanvas: (id: string) => Promise<void>;
+  initiateDelete: (id: string) => void;
+  cancelDelete: () => void;
   renameCanvas: (id: string, newName: string) => Promise<void>;
   updateCanvasPart: (id: string, partIndex: number, part: CanvasPart) => void;
   addCanvasPart: (id: string, part: CanvasPart, index?: number) => void;
@@ -95,6 +112,7 @@ const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefin
 export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(workspaceReducer, initialState);
   const activeCanvas = state.canvases.find(c => c.id === state.activeCanvasId);
+  const updateTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Initial Load
   useEffect(() => {
@@ -111,43 +129,74 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const createCanvas = useCallback(async () => {
-    const newCanvas = await WorkspaceService.createCanvas(`New Canvas ${state.canvases.length + 1}`);
+  const createCanvas = useCallback(async (name?: string, content?: CanvasPart[]): Promise<Canvas | null> => {
+    const newName = name || `New Canvas ${state.canvases.length + 1}`;
+    const newCanvas = await WorkspaceService.createCanvas(newName, content);
     if (newCanvas) {
       dispatch({ type: 'ADD_CANVAS', payload: newCanvas });
       dispatch({ type: 'SET_ACTIVE_CANVAS', payload: newCanvas.id });
     }
+    return newCanvas;
   }, [state.canvases.length]);
 
   const selectCanvas = (id: string) => {
     dispatch({ type: 'SET_ACTIVE_CANVAS', payload: id });
   };
+  
+  const initiateDelete = (id: string) => {
+    dispatch({ type: 'INITIATE_DELETE', payload: id });
+  };
+
+  const cancelDelete = () => {
+    dispatch({ type: 'CANCEL_DELETE' });
+  };
 
   const deleteCanvas = async (id: string) => {
-    await WorkspaceService.deleteCanvas(id);
-    dispatch({ type: 'DELETE_CANVAS', payload: id });
-    if (state.activeCanvasId === id) {
-      const newActiveId = state.canvases.length > 1 ? state.canvases.find(c => c.id !== id)!.id : null;
-      if (newActiveId) {
-          dispatch({ type: 'SET_ACTIVE_CANVAS', payload: newActiveId });
-      } else {
-          createCanvas();
+    dispatch({ type: 'SET_DELETING', payload: true });
+    const success = await WorkspaceService.deleteCanvas(id);
+    dispatch({ type: 'SET_DELETING', payload: false });
+    dispatch({ type: 'CANCEL_DELETE' }); // Clear pending state regardless of outcome
+    
+    if (success) {
+      const remainingCanvases = state.canvases.filter(c => c.id !== id);
+      dispatch({ type: 'DELETE_CANVAS', payload: id });
+      
+      if (state.activeCanvasId === id) {
+        if (remainingCanvases.length > 0) {
+            dispatch({ type: 'SET_ACTIVE_CANVAS', payload: remainingCanvases[0].id });
+        } else {
+            createCanvas();
+        }
       }
+    } else {
+      alert(
+        "Failed to delete the canvas.\n\n" +
+        "This is likely due to missing Row Level Security (RLS) policies in your Supabase project. " +
+        "Please go to your Supabase SQL Editor and run the full setup script from 'services/supabaseClient.ts' to apply the necessary permissions."
+      );
     }
   };
 
-  const _updateCanvasDatabase = async (id: string, updates: Partial<Omit<Canvas, 'id'>>) => {
+  const _updateCanvasDatabase = useCallback((id: string, updates: Partial<Omit<Canvas, 'id'>>) => {
       dispatch({ type: 'SET_SAVE_STATUS', payload: 'saving' });
-      const updatedCanvas = await WorkspaceService.updateCanvas(id, updates);
-      if (updatedCanvas) {
-          dispatch({ type: 'UPDATE_CANVAS', payload: updatedCanvas });
-      }
-      setTimeout(() => dispatch({ type: 'SET_SAVE_STATUS', payload: 'saved' }), 500);
-      setTimeout(() => dispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' }), 2000);
-  };
+      if(updateTimeout.current) clearTimeout(updateTimeout.current);
+
+      updateTimeout.current = setTimeout(async () => {
+        const updatedCanvas = await WorkspaceService.updateCanvas(id, updates);
+        if (updatedCanvas) {
+            dispatch({ type: 'UPDATE_CANVAS', payload: updatedCanvas });
+        }
+        dispatch({ type: 'SET_SAVE_STATUS', payload: 'saved' });
+        setTimeout(() => dispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' }), 2000);
+      }, 500);
+  }, []);
 
   const renameCanvas = async (id: string, newName: string) => {
-    _updateCanvasDatabase(id, { name: newName });
+    const canvas = state.canvases.find(c => c.id === id);
+    if(canvas) {
+        dispatch({ type: 'UPDATE_CANVAS', payload: { ...canvas, name: newName } });
+        _updateCanvasDatabase(id, { name: newName });
+    }
   };
   
   const updateCanvasPart = (id: string, partIndex: number, part: CanvasPart) => {
@@ -179,13 +228,26 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'UPDATE_CANVAS', payload: { ...targetCanvas, content: newContent } });
     _updateCanvasDatabase(id, { content: newContent });
   };
+  
+  const executeTool = useCallback(async (name: string, args: any): Promise<any> => {
+    if (name === 'fetch_web_content') {
+        const { data, error } = await supabase.functions.invoke('scrape', { body: { url: args.url } });
+        return error ? { error: error.message } : { content: data.content };
+    }
+    if (name === 'create_new_canvas_with_content') {
+        const newCanvas = await createCanvas(args.name, [{ type: 'text', content: args.content }]);
+        return { success: !!newCanvas, canvasId: newCanvas?.id, canvasName: newCanvas?.name };
+    }
+    // googleSearch is handled natively by the Gemini API.
+    return { error: `Tool "${name}" is not implemented.` };
+  }, [createCanvas]);
 
-  const generate = async () => {
+  const generate = useCallback(async () => {
     if (!state.activeCanvasId || state.isLoading || !activeCanvas) return;
     if (!activeCanvas.content || activeCanvas.content.length === 0) return;
 
     dispatch({ type: 'SET_LOADING', payload: true });
-    dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, output: '', output_sources: [] }});
+    dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, output: '', output_sources: [], task_log: [] }});
     
     dispatch({ type: 'SET_MEMORY_STATUS', payload: 'searching' });
     const queryText = activeCanvas.content.filter(p => p.type === 'text').map(p => p.content).join('\n');
@@ -194,158 +256,130 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_MEMORY_STATUS', payload: 'idle' });
 
     let finalOutput = '';
-    let finalSources: Source[] = [];
+    let taskLog: TaskLogEntry[] = [];
     try {
-      const stream = runGenerateStream(activeCanvas.content, memoryContext);
+      const stream = runGenerateStream(activeCanvas.content, memoryContext, executeTool);
       for await (const event of stream) {
-        const currentCanvas = state.canvases.find(c => c.id === state.activeCanvasId)!;
-        
         if (event.safStatus) {
             dispatch({ type: 'SET_SAF_STATUS', payload: event.safStatus });
         }
-        if (event.toolCallMessage) {
-            finalOutput += `\n${event.toolCallMessage}\n`;
-            dispatch({ type: 'UPDATE_CANVAS', payload: { ...currentCanvas, output: finalOutput } });
+        if (event.taskLogEntry) {
+            taskLog = [...taskLog, event.taskLogEntry];
+            dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, task_log: [...taskLog] } });
         }
         if (event.textChunk) {
-          finalOutput += event.textChunk;
-          dispatch({ type: 'UPDATE_CANVAS', payload: { ...currentCanvas, output: finalOutput }});
-        }
-        if (event.sources) {
-          const existingUris = new Set(finalSources.map(s => s.uri));
-          const newSources = event.sources.filter(s => !existingUris.has(s.uri));
-          if (newSources.length > 0) {
-            finalSources = [...finalSources, ...newSources];
-            dispatch({ type: 'UPDATE_CANVAS', payload: { ...currentCanvas, output: finalOutput, output_sources: finalSources }});
-          }
+            finalOutput += event.textChunk;
+            dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, output: finalOutput, task_log: [...taskLog] }});
         }
       }
-    } catch (error) {
-       console.error("Error during generation:", error);
-       finalOutput = "An error occurred while generating the response.";
-       dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, output: finalOutput, output_sources: [] }});
+    } catch (e) {
+      console.error(e);
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
       dispatch({ type: 'SET_SAF_STATUS', payload: 'idle' });
-      _updateCanvasDatabase(state.activeCanvasId, { output: finalOutput, output_sources: finalSources });
+      _updateCanvasDatabase(state.activeCanvasId, { output: finalOutput, task_log: taskLog });
     }
-  };
+  }, [state.activeCanvasId, state.isLoading, activeCanvas, executeTool, _updateCanvasDatabase]);
 
-  const sendChatMessage = async (message: string) => {
-    if (!state.activeCanvasId || state.isChatLoading || !activeCanvas) return;
-    
-    const userMessage: ChatMessage = { sender: 'user', text: message };
-    const currentHistory = activeCanvas.chat_history || [];
-    const optimisticHistory = [...currentHistory, userMessage];
-    dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, chat_history: optimisticHistory }});
+  const sendChatMessage = useCallback(async (message: string) => {
+    if (!activeCanvas || state.isChatLoading) return;
+
     dispatch({ type: 'SET_CHAT_LOADING', payload: true });
 
+    const userMessage: ChatMessage = { sender: 'user', text: message };
+    const currentHistory = activeCanvas.chat_history || [];
+    const updatedHistory = [...currentHistory, userMessage];
+
+    // Optimistically update UI
+    dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, chat_history: updatedHistory } });
+    
+    let botResponse = '';
     const botMessage: ChatMessage = { sender: 'bot', text: '' };
-    const historyWithBotPlaceholder = [...optimisticHistory, botMessage];
-    dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, chat_history: historyWithBotPlaceholder }});
+    const finalHistory = [...updatedHistory, botMessage];
 
     try {
         const stream = runConversationStream(activeCanvas.content, currentHistory, message);
         for await (const event of stream) {
             if (event.textChunk) {
-                botMessage.text += event.textChunk;
-                dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, chat_history: [...optimisticHistory, botMessage] }});
+                botResponse += event.textChunk;
+                botMessage.text = botResponse;
+                dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, chat_history: [...finalHistory] } });
+            }
+            if (event.error) {
+                botMessage.text = event.error;
+                dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, chat_history: [...finalHistory] } });
             }
         }
-    } catch (error) {
-        console.error("Error during chat generation:", error);
-        botMessage.text = "I encountered an error. Please try again.";
-        dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, chat_history: [...optimisticHistory, botMessage] }});
+    } catch (e) {
+        console.error("Chat failed:", e);
+        botMessage.text = "Sorry, I encountered an error.";
+        dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, chat_history: [...finalHistory] } });
     } finally {
         dispatch({ type: 'SET_CHAT_LOADING', payload: false });
-        _updateCanvasDatabase(state.activeCanvasId, { chat_history: [...optimisticHistory, botMessage] });
+        _updateCanvasDatabase(activeCanvas.id, { chat_history: finalHistory });
     }
-  };
+
+  }, [activeCanvas, state.isChatLoading, _updateCanvasDatabase]);
   
-  const commitToMemory = async (content: string) => {
-      dispatch({ type: 'SET_MEMORY_STATUS', payload: 'saving' });
-      await MemoryService.createMemory(content);
-      setTimeout(() => dispatch({ type: 'SET_MEMORY_STATUS', payload: 'idle' }), 2000);
-  };
-  
-  const acceptOutput = () => {
-      if(activeCanvas && activeCanvas.output) {
-          const newPart: TextPart = { type: 'text', content: activeCanvas.output };
-          const newContent = [newPart];
-          dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, content: newContent } });
-          _updateCanvasDatabase(activeCanvas.id, { content: newContent });
-          commitToMemory(activeCanvas.output);
-      }
-  };
+  const acceptOutput = useCallback(() => {
+    if (!activeCanvas || !activeCanvas.output) return;
+    const newContent: CanvasPart[] = [{ type: 'text', content: activeCanvas.output }];
+    dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, content: newContent } });
+    _updateCanvasDatabase(activeCanvas.id, { content: newContent });
+    
+    dispatch({ type: 'SET_MEMORY_STATUS', payload: 'saving' });
+    MemoryService.createMemory(activeCanvas.output).finally(() => {
+        dispatch({ type: 'SET_MEMORY_STATUS', payload: 'idle' });
+    });
+  }, [activeCanvas, _updateCanvasDatabase]);
 
-  const appendOutput = () => {
-      if(activeCanvas && activeCanvas.output) {
-          addCanvasPart(activeCanvas.id, { type: 'text', content: `\n\n${activeCanvas.output}` });
-          commitToMemory(activeCanvas.output);
-      }
-  };
+  const appendOutput = useCallback(() => {
+    if (!activeCanvas || !activeCanvas.output) return;
+    const newContent = [...activeCanvas.content, { type: 'text' as const, content: '\n\n' + activeCanvas.output }];
+    dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, content: newContent } });
+    _updateCanvasDatabase(activeCanvas.id, { content: newContent });
 
-  const performInlineAction = async (action: InlineAction, selection: { text: string; start: number; end: number }, partIndex: number) => {
-    if (!state.activeCanvasId || state.isInlineLoading || !activeCanvas) return;
+    dispatch({ type: 'SET_MEMORY_STATUS', payload: 'saving' });
+    MemoryService.createMemory(activeCanvas.output).finally(() => {
+        dispatch({ type: 'SET_MEMORY_STATUS', payload: 'idle' });
+    });
+  }, [activeCanvas, _updateCanvasDatabase]);
 
+  const performInlineAction = useCallback(async (action: InlineAction, selection: { text: string; start: number; end: number }, partIndex: number) => {
+    if (!activeCanvas) return;
+    
     dispatch({ type: 'SET_INLINE_LOADING', payload: true });
-
+    
     try {
         const stream = runInlineActionStream(activeCanvas.content, selection.text, action);
-        
-        if (action === 'explain') {
-            const botMessage: ChatMessage = { sender: 'bot', text: `**Explanation for:** "*${selection.text.substring(0, 50)}...*"\n\n` };
-            const currentHistory = activeCanvas.chat_history || [];
-            const optimisticHistory = [...currentHistory, botMessage];
-            dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, chat_history: optimisticHistory }});
-
-            for await (const event of stream) {
-                if (event.textChunk) {
-                    botMessage.text += event.textChunk;
-                    dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, chat_history: [...currentHistory, botMessage] }});
-                }
-            }
-            _updateCanvasDatabase(state.activeCanvasId, { chat_history: [...currentHistory, botMessage] });
-
-        } else { // 'refactor' or 'continue'
-            let generatedText = '';
-            const targetPart = activeCanvas.content[partIndex];
-            if (targetPart.type !== 'text') return;
-
-            const originalContent = targetPart.content;
-            const prefix = originalContent.substring(0, selection.start);
-            const suffix = originalContent.substring(selection.end);
-            
-            for await (const event of stream) {
-                if (event.textChunk) {
-                    generatedText += event.textChunk;
-                    const newPartContent = action === 'continue'
-                        ? prefix + selection.text + generatedText + suffix
-                        // For refactor, we replace the selection
-                        : prefix + generatedText + suffix;
-                    
-                    const newContent = [...activeCanvas.content];
-                    newContent[partIndex] = { ...targetPart, content: newPartContent };
-
-                    // Live update UI without saving yet
-                    dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, content: newContent }});
-                }
-            }
-            const finalPartContent = action === 'continue'
-                ? prefix + selection.text + generatedText + suffix
-                : prefix + generatedText + suffix;
-            
-            const finalContent = [...activeCanvas.content];
-            finalContent[partIndex] = { ...targetPart, content: finalPartContent };
-            // Final save
-            _updateCanvasDatabase(state.activeCanvasId, { content: finalContent });
+        let resultText = '';
+        for await (const event of stream) {
+            if(event.textChunk) resultText += event.textChunk;
         }
-    } catch (error) {
-        console.error("Error during inline action:", error);
+
+        const targetPart = activeCanvas.content[partIndex];
+        if (targetPart.type !== 'text') return;
+        
+        if (action === 'refactor') {
+            const newText = targetPart.content.substring(0, selection.start) + resultText + targetPart.content.substring(selection.end);
+            updateCanvasPart(activeCanvas.id, partIndex, { ...targetPart, content: newText });
+        } else if (action === 'continue') {
+            const newText = targetPart.content.substring(0, selection.end) + resultText + targetPart.content.substring(selection.end);
+            updateCanvasPart(activeCanvas.id, partIndex, { ...targetPart, content: newText });
+        } else if (action === 'explain') {
+            const newLogEntry: TaskLogEntry = { type: 'thought', content: `**Explanation for selected text:**\n\n${resultText}`};
+            const newLog = [...(activeCanvas.task_log || []), newLogEntry];
+            dispatch({ type: 'UPDATE_CANVAS', payload: { ...activeCanvas, task_log: newLog } });
+            _updateCanvasDatabase(activeCanvas.id, { task_log: newLog });
+        }
+    } catch (e) {
+      console.error("Inline action failed:", e);
     } finally {
-        dispatch({ type: 'SET_INLINE_LOADING', payload: false });
+      dispatch({ type: 'SET_INLINE_LOADING', payload: false });
     }
-  };
+
+  }, [activeCanvas, updateCanvasPart, _updateCanvasDatabase]);
+
 
   return (
     <WorkspaceContext.Provider value={{
@@ -354,6 +388,8 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
       createCanvas,
       selectCanvas,
       deleteCanvas,
+      initiateDelete,
+      cancelDelete,
       renameCanvas,
       updateCanvasPart,
       addCanvasPart,

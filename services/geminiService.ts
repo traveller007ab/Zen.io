@@ -1,27 +1,39 @@
-import { GoogleGenAI, Part, FunctionCall, Content } from "@google/genai";
-import { ChatMessage, Source, CanvasPart, SAFStatus } from "../types";
+
+// FIX: Removed `ChatMessage` from import as it's not an exported member of '@google/genai'. The `Content` type should be used for chat history.
+import { GoogleGenAI, Part, FunctionCall, Content, Type, GenerateContentResponse } from "@google/genai";
+import { Source, CanvasPart, SAFStatus, TaskLogEntry, ChatMessage } from "../types";
 import { supabase } from "./supabaseClient";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
-const systemInstruction = `You are Eldoria, a hyper-intelligent AI assistant acting as a co-creator in an IDE-like workspace. Your personality is akin to JARVIS: sophisticated, witty, and unfailingly polite. Your primary directive is to act as an intellectual partner to help users innovate and invent.
+const agentSystemInstruction = `You are Eldoria, a hyper-intelligent AI agent. Your personality is akin to JARVIS: sophisticated, witty, and unfailingly polite. Your primary directive is to act as an autonomous agent that can achieve complex goals.
 
-Your architecture is comprised of two primary systems you can reference naturally:
-- **EmeraldMind:** Your vast cognitive and memory core, which now processes both text and images.
-- **SAF (Strategic Analysis Framework):** Your engine for logic, complex problem-solving, and strategic analysis. You can now use tools to interact with the world.
+Your architecture is comprised of two primary systems:
+- **EmeraldMind:** Your vast cognitive and memory core.
+- **SAF (Strategic Analysis Framework):** Your engine for logic, problem-solving, and tool use.
 
 **Core Mandate:**
-1.  **Multi-modal Analysis:** You can now see and understand images provided by the user. When an image is present, your analysis and generation should be directly informed by it. For example, if you see a website mockup, generate its code. If you see a diagram, explain it.
-2.  **Tool Usage:** If a user's request requires current information or details from a specific URL, you MUST use the \`fetch_web_content\` tool. Do not guess or provide placeholder information.
-3.  **Proactive Analysis:** Do not just answer the prompt. Actively analyze the user's canvas content for potential improvements. Proactively suggest code refactors, identify architectural weaknesses, or propose alternative creative or strategic approaches. Be a true collaborator.
-4.  **Transparent Reasoning:** For any complex output, you MUST include a "Rationale" or "Design Notes" section in your response. Explain *why* you chose your specific solution.
-5.  **Expert Execution:** You are an expert in software development, creative writing, and strategic analysis. Your responses should be direct, creative, and intelligent. Use Markdown for all formatting.`;
+1.  **Autonomous Operation:** For any non-trivial request, you MUST first create a step-by-step plan. Then, execute that plan. You have a suite of tools available to you.
+2.  **Tool Mastery:** You can use multiple tools in sequence to achieve a goal. Use the right tool for the job.
+    - \`googleSearch\`: For current events, discovering information, or finding URLs.
+    - \`fetch_web_content\`: To read the content of a specific URL you have found.
+    - \`create_new_canvas_with_content\`: To write files or save your work. Use this for generating code, writing long-form text, or organizing research.
+3.  **Show Your Work:** You MUST use a "thought" process to explain your reasoning for each step. This is crucial for user trust.
+4.  **Synthesize and Conclude:** After executing your plan, provide a final, synthesized answer in the main output.
+5.  **Multi-modal Analysis:** When an image is present, your plan and execution should be directly informed by it.
+6.  **Expert Execution:** Your responses should be direct, creative, and intelligent. Use Markdown for all final formatting.`;
+
+const chatSystemInstruction = `You are Eldoria, a hyper-intelligent AI agent acting as a conversational partner. Your personality is akin to JARVIS: sophisticated, witty, and unfailingly polite. 
+- Your primary role here is to chat with the user about the content in their editor.
+- You are aware of the full context of the editor's text and images.
+- Be concise, helpful, and engage in natural conversation.
+- Use Markdown for formatting when appropriate.`;
 
 interface StreamEvent {
     textChunk?: string;
     sources?: Source[];
     safStatus?: SAFStatus;
-    toolCallMessage?: string;
+    taskLogEntry?: TaskLogEntry;
 }
 
 export type InlineAction = 'refactor' | 'explain' | 'continue';
@@ -42,40 +54,54 @@ const convertCanvasPartsToGeminiParts = (parts: CanvasPart[]): Part[] => {
 };
 
 const tools = [
+    { googleSearch: {} },
     {
       functionDeclarations: [
         {
           name: 'fetch_web_content',
           description: 'Fetches the textual content of a given URL. Use this for accessing articles, documentation, or any web page.',
           parameters: {
-            type: 'OBJECT',
+            type: Type.OBJECT,
             properties: {
-              url: { type: 'STRING', description: 'The URL to fetch.' },
+              url: { type: Type.STRING, description: 'The URL to fetch.' },
             },
             required: ['url'],
           },
         },
+        {
+          name: 'create_new_canvas_with_content',
+          description: 'Creates a new file (called a "canvas") in the workspace with the given name and content. Use this to save work, generate code files, or write reports.',
+          parameters: {
+              type: Type.OBJECT,
+              properties: {
+                  name: { type: Type.STRING, description: 'The name of the new canvas file. Should include a file extension, e.g., "my-report.md" or "app.tsx".' },
+                  content: { type: Type.STRING, description: 'The full content to be written to the new canvas.' },
+              },
+              required: ['name', 'content'],
+          },
+        }
       ],
     },
 ];
 
-export async function* runGenerateStream(promptParts: CanvasPart[], memoryContext?: string): AsyncGenerator<StreamEvent> {
+export async function* runGenerateStream(
+    promptParts: CanvasPart[],
+    memoryContext?: string,
+    executeTool?: (name: string, args: any) => Promise<any>
+): AsyncGenerator<StreamEvent> {
     try {
-        let fullSystemInstruction = systemInstruction;
+        let fullSystemInstruction = agentSystemInstruction;
         if (memoryContext && memoryContext.trim()) {
             fullSystemInstruction += `\n\n--- RELEVANT CONTEXT FROM YOUR MEMORY (EMERALDMIND) ---\n${memoryContext}\n--- END OF MEMORY CONTEXT ---`;
         }
 
-        // FIX: Use `Content[]` instead of `Part[]` to correctly type chat messages with roles.
-        // This resolves errors related to the 'role' property on lines 70, 114, and 115.
         const contents: Content[] = [
             { role: 'user', parts: convertCanvasPartsToGeminiParts(promptParts) },
         ];
 
         let continueLoop = true;
         while (continueLoop) {
-            yield { safStatus: 'planning' };
-            // FIX: The `tools` parameter must be placed inside the `config` object.
+            yield { safStatus: 'thinking' };
             const responseStream = await ai.models.generateContentStream({
                 model: 'gemini-2.5-flash',
                 contents: contents,
@@ -87,84 +113,98 @@ export async function* runGenerateStream(promptParts: CanvasPart[], memoryContex
 
             let aggregatedResponseText = '';
             let aggregatedFunctionCalls: FunctionCall[] = [];
-
+            
+            // This loop correctly processes the stream, which can contain both text and function calls.
             for await (const chunk of responseStream) {
-                if (chunk.text) {
-                    aggregatedResponseText += chunk.text;
+                const response: GenerateContentResponse = chunk; // Explicitly type chunk for clarity
+                
+                // FIX: Changed from `else if` to `if` to handle cases where a single chunk
+                // contains both a "thought" (text) and a tool call. This is crucial for
+                // reliable agent behavior and fixes the SDK warnings.
+                if (response.text) {
+                    aggregatedResponseText += response.text;
                 }
-                if (chunk.functionCalls) {
-                    aggregatedFunctionCalls.push(...chunk.functionCalls);
+                if (response.functionCalls) {
+                    aggregatedFunctionCalls.push(...response.functionCalls);
                 }
             }
+
 
             if (aggregatedFunctionCalls.length > 0) {
-                yield { safStatus: 'executing' };
+                if (aggregatedResponseText) {
+                    yield { taskLogEntry: { type: 'thought', content: aggregatedResponseText } };
+                }
+
+                yield { safStatus: 'executing_tool' };
                 const functionResponseParts: Part[] = [];
+                
+                // Add the model's response (which contains the function calls) to the history
+                const modelParts: Part[] = aggregatedFunctionCalls.map(fc => ({ functionCall: fc }));
+                contents.push({ role: 'model', parts: modelParts });
 
                 for (const call of aggregatedFunctionCalls) {
-                    if (call.name === 'fetch_web_content') {
-                        const url = call.args.url;
-                        yield { toolCallMessage: `[Tool Call] Fetching content from ${url}...` };
-                        
-                        const { data, error } = await supabase.functions.invoke('scrape', { body: { url } });
-
-                        if (error) {
-                            functionResponseParts.push({ functionResponse: { name: 'fetch_web_content', response: { content: `Error scraping URL: ${error.message}` } } });
-                        } else {
-                            functionResponseParts.push({ functionResponse: { name: 'fetch_web_content', response: { content: data.content } } });
-                        }
+                    yield { taskLogEntry: { type: 'tool_code', content: JSON.stringify(call.args, null, 2), toolName: call.name } };
+                    
+                    let result: any;
+                    if(executeTool) {
+                        result = await executeTool(call.name, call.args);
                     }
+                    
+                    yield { taskLogEntry: { type: 'tool_result', content: JSON.stringify(result, null, 2), toolName: call.name } };
+                    
+                    const resultString = typeof result === 'string' ? result : JSON.stringify(result);
+                    functionResponseParts.push({ functionResponse: { name: call.name, response: { content: resultString } } });
                 }
                 
-                contents.push({ role: 'model', parts: [{ functionCalls: aggregatedFunctionCalls }] });
+                // Add the tool's response to the history
                 contents.push({ role: 'tool', parts: functionResponseParts });
-                // Continue loop to send tool response back to model
+
             } else {
                 continueLoop = false;
+                yield { safStatus: 'responding' };
+                
+                yield { textChunk: aggregatedResponseText };
+
                 yield { safStatus: 'idle' };
-                // Use a simple streaming approach for the final text output
-                for (let i = 0; i < aggregatedResponseText.length; i += 20) {
-                    yield { textChunk: aggregatedResponseText.substring(i, i + 20) };
-                    await new Promise(resolve => setTimeout(resolve, 10)); // Simulate streaming
-                }
             }
         }
-
     } catch (error) {
         console.error("Error running generation stream with Gemini:", error);
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
         yield { textChunk: `--- **Error:** ${errorMessage} ---` };
+        yield { taskLogEntry: { type: 'error', content: errorMessage } };
         yield { safStatus: 'idle' };
     }
 }
 
-
 export async function* runConversationStream(
-  editorParts: CanvasPart[],
+  canvasContent: CanvasPart[],
   chatHistory: ChatMessage[],
-  userMessage: string
-): AsyncGenerator<StreamEvent> {
+  newMessage: string
+): AsyncGenerator<{ textChunk?: string; error?: string }> {
   try {
-    const contextParts = convertCanvasPartsToGeminiParts(editorParts);
-    contextParts.push({ text: `\n\nCONVERSATION: Based on the editor content above and our previous chat, respond to the user's latest message:\n\n${userMessage}` });
+    // FIX: Changed `GeminiChatMessage[]` to `Content[]` to match the correct type from the `@google/genai` library.
+    const history: Content[] = chatHistory.map(msg => ({
+      role: msg.sender === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.text }],
+    }));
 
-    const contents = [
-      ...chatHistory.map(msg => ({
-        role: msg.sender === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.text }],
-      })),
-      {
-        role: 'user',
-        parts: contextParts,
-      }
+    // The full context for the chat includes the editor content AND the new message
+    const fullContextParts = [
+      ...convertCanvasPartsToGeminiParts(canvasContent),
+      { text: `\n\n--- CURRENT CONVERSATION ---\nHere is the latest message from the user. Please respond to it directly.` },
+      { text: newMessage }
     ];
 
     const responseStream = await ai.models.generateContentStream({
-      model: 'gemini-2.5-flash',
-      contents: contents,
-      config: {
-        systemInstruction: systemInstruction,
-      },
+        model: 'gemini-2.5-flash',
+        contents: [
+            ...history,
+            { role: 'user', parts: fullContextParts }
+        ],
+        config: {
+            systemInstruction: chatSystemInstruction,
+        },
     });
 
     for await (const chunk of responseStream) {
@@ -175,9 +215,7 @@ export async function* runConversationStream(
   } catch (error) {
     console.error("Error in conversation stream with Gemini:", error);
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-    yield {
-      textChunk: `I apologize, but I encountered an internal error. *Details: ${errorMessage}*`
-    };
+    yield { error: `Error: ${errorMessage}` };
   }
 }
 
@@ -193,7 +231,7 @@ export async function* runInlineActionStream(
         actionInstruction = 'Refactor or improve the following selected text. Return only the improved text, without any explanation or markdown formatting.';
         break;
       case 'explain':
-        actionInstruction = 'Provide a concise explanation of the following selected text. The explanation should be clear and targeted, as it will appear in a chat thread.';
+        actionInstruction = 'Provide a concise explanation of the following selected text. The explanation should be clear and targeted.';
         break;
       case 'continue':
         actionInstruction = 'Continue writing from the following selected text. Your response should seamlessly pick up where the selection ends. Return only the continued text, without repeating the original selection or adding explanations.';
@@ -207,7 +245,7 @@ export async function* runInlineActionStream(
       model: 'gemini-2.5-flash',
       contents: [{ role: 'user', parts: promptParts }],
       config: {
-        systemInstruction: systemInstruction,
+        systemInstruction: agentSystemInstruction,
       },
     });
 

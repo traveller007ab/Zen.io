@@ -1,6 +1,8 @@
-import React from 'react';
+
+import React, { useState } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer';
-import { ChatThread } from './ChatThread';
+import { TaskPanel } from './TaskPanel';
+import { ChatPanel } from './ChatPanel';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Source } from '../types';
 
@@ -10,7 +12,7 @@ const LoadingIndicator = () => (
             <div className="w-full h-16 bg-cyan-900/50 rounded-lg relative overflow-hidden border border-cyan-500/30">
                 <div className="absolute top-0 left-0 h-full w-full bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent animate-[scanner_3s_infinite_ease-in-out]"></div>
             </div>
-            <p className="text-glow animate-pulse">Constructing Response...</p>
+            <p className="text-glow animate-pulse">Engaging SAF Core...</p>
         </div>
         <style>{`
             @keyframes scanner {
@@ -42,70 +44,93 @@ const Sources: React.FC<{ sources: Source[] }> = ({ sources }) => (
     </div>
 );
 
+type Tab = 'output' | 'task' | 'chat';
+
+const TabButton: React.FC<{
+    label: string;
+    isActive: boolean;
+    onClick: () => void;
+}> = ({ label, isActive, onClick }) => {
+    return (
+        <button
+            onClick={onClick}
+            className={`px-4 py-2 text-sm font-medium transition-all duration-300 border-b-2 ${
+                isActive
+                    ? 'text-cyan-300 border-cyan-400 text-glow'
+                    : 'text-cyan-400/60 border-transparent hover:bg-cyan-500/10 hover:text-cyan-300'
+            }`}
+        >
+            {label}
+        </button>
+    );
+};
+
 
 export const OutputPanel: React.FC = () => {
     const { 
         activeCanvas, 
-        isLoading, 
-        isChatLoading, 
-        sendChatMessage,
+        isLoading,
         acceptOutput,
         appendOutput
     } = useWorkspace();
+    
+    const [activeTab, setActiveTab] = useState<Tab>('output');
 
     const hasOutput = !!activeCanvas?.output?.trim();
     const hasSources = !!activeCanvas?.output_sources && activeCanvas.output_sources.length > 0;
 
   return (
     <div className="panel w-full md:w-1/2 flex flex-col overflow-hidden">
-        {/* Main Output Section */}
-        <div className="p-4 flex-grow relative flex flex-col h-1/2">
-            <div className="flex justify-between items-center mb-2 pb-2 text-glow border-b border-cyan-500/20 shrink-0">
-                <h2 className="text-lg font-semibold text-cyan-300">Output</h2>
-                {hasOutput && !isLoading && (
-                    <div className="flex items-center gap-2">
-                        <button 
-                            onClick={appendOutput}
-                            className="text-xs bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 px-2 py-1 rounded-md transition-colors"
-                            title="Append output to the end of the editor content"
-                        >
-                           Append 
-                        </button>
-                        <button 
-                            onClick={acceptOutput}
-                            className="text-xs bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 px-2 py-1 rounded-md transition-colors"
-                            title="Replace editor content with this output"
-                        >
-                           Accept & Replace
-                        </button>
-                    </div>
-                )}
+        {/* Header with Tabs */}
+        <div className="flex justify-between items-center border-b border-cyan-500/20 shrink-0 px-4">
+            <div className="flex items-center gap-2">
+                <TabButton label="Output" isActive={activeTab === 'output'} onClick={() => setActiveTab('output')} />
+                <TabButton label="Task Log" isActive={activeTab === 'task'} onClick={() => setActiveTab('task')} />
+                <TabButton label="Chat" isActive={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
             </div>
-            <div className="flex-grow overflow-y-auto custom-scrollbar pr-2 relative">
-                {isLoading && !activeCanvas?.output ? (
-                    <LoadingIndicator />
-                ) : (
-                    <>
-                        <MarkdownRenderer>
-                            {activeCanvas?.output || ''}
-                        </MarkdownRenderer>
-                        {hasSources && <Sources sources={activeCanvas.output_sources!} />}
-                    </>
-                )}
-            </div>
+            {hasOutput && !isLoading && activeTab === 'output' && (
+                <div className="flex items-center gap-2">
+                    <button 
+                        onClick={appendOutput}
+                        className="text-xs bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 px-2 py-1 rounded-md transition-colors"
+                        title="Append output to the end of the editor content"
+                    >
+                        Append 
+                    </button>
+                    <button 
+                        onClick={acceptOutput}
+                        className="text-xs bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 px-2 py-1 rounded-md transition-colors"
+                        title="Replace editor content with this output"
+                    >
+                        Accept & Replace
+                    </button>
+                </div>
+            )}
         </div>
 
-        {/* Divider */}
-        <div className="w-full h-px bg-cyan-500/20 shrink-0"></div>
-
-        {/* Chat Thread Section */}
-        <div className="p-4 flex-grow relative flex flex-col h-1/2">
-            <h2 className="text-lg font-semibold text-cyan-300 mb-2 pb-2 text-glow border-b border-cyan-500/20 shrink-0">Conversation</h2>
-            <ChatThread
-                messages={activeCanvas?.chat_history || []}
-                isLoading={isChatLoading}
-                onSendMessage={sendChatMessage}
-            />
+        {/* Content Area */}
+        <div className="flex-grow p-4 overflow-hidden">
+            {activeTab === 'output' && (
+                <div className="h-full overflow-y-auto custom-scrollbar pr-2">
+                    {isLoading && !activeCanvas?.output ? (
+                        <LoadingIndicator />
+                    ) : (
+                        <>
+                            <MarkdownRenderer>
+                                {activeCanvas?.output || ''}
+                            </MarkdownRenderer>
+                            {hasSources && <Sources sources={activeCanvas.output_sources!} />}
+                        </>
+                    )}
+                </div>
+            )}
+            {activeTab === 'task' && (
+                <TaskPanel
+                    log={activeCanvas?.task_log || []}
+                    isLoading={isLoading}
+                />
+            )}
+            {activeTab === 'chat' && <ChatPanel />}
         </div>
     </div>
   );

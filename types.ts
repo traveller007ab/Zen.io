@@ -63,6 +63,14 @@ export interface ImagePart {
 
 export type CanvasPart = TextPart | ImagePart;
 
+export type TaskLogEntryType = 'plan' | 'thought' | 'tool_code' | 'tool_result' | 'error';
+
+export interface TaskLogEntry {
+  type: TaskLogEntryType;
+  content: string;
+  toolName?: string;
+}
+
 
 export interface Canvas {
   id: string;
@@ -71,6 +79,7 @@ export interface Canvas {
   content: CanvasPart[];
   output: string;
   chat_history: ChatMessage[] | null;
+  task_log: TaskLogEntry[] | null;
   output_sources: Source[] | null;
 }
 
@@ -79,4 +88,4 @@ export interface Memory {
   content: string;
 }
 
-export type SAFStatus = 'idle' | 'planning' | 'executing';
+export type SAFStatus = 'idle' | 'planning' | 'thinking' | 'executing_tool' | 'responding';

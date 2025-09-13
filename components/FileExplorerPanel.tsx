@@ -1,7 +1,6 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Canvas } from '../types';
-import { EldoriaLogo, PencilIcon } from './Icons';
+import { EldoriaLogo, PencilIcon, TrashIcon, CheckIcon, LoadingSpinnerIcon } from './Icons';
 import { useWorkspace } from '../context/WorkspaceContext';
 
 interface CanvasItemProps {
@@ -10,10 +9,21 @@ interface CanvasItemProps {
 }
 
 const CanvasItem: React.FC<CanvasItemProps> = ({ canvas, isActive }) => {
-    const { selectCanvas, deleteCanvas, renameCanvas } = useWorkspace();
+    const { 
+      selectCanvas, 
+      deleteCanvas, 
+      renameCanvas,
+      initiateDelete,
+      cancelDelete,
+      isDeleting,
+      pendingDeletionCanvasId
+    } = useWorkspace();
+
     const [isRenaming, setIsRenaming] = useState(false);
     const [name, setName] = useState(canvas.name);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const isPendingDeletion = pendingDeletionCanvasId === canvas.id;
 
     useEffect(() => {
         if (isRenaming && inputRef.current) {
@@ -39,12 +49,38 @@ const CanvasItem: React.FC<CanvasItemProps> = ({ canvas, isActive }) => {
             setIsRenaming(false);
         }
     };
+    
+    const handleConfirmDelete = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        deleteCanvas(canvas.id);
+    };
+
+    const handleCancelDelete = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        cancelDelete();
+    };
+    
+    const handleInitiateDelete = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        initiateDelete(canvas.id);
+    };
+
+    const baseClasses = `flex justify-between items-center px-3 py-2 rounded-md cursor-pointer group transition-all duration-300 relative border`;
+    const activeClasses = `bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-[0_0_15px_var(--glow-color)]`;
+    const inactiveClasses = `text-cyan-200/70 border-transparent hover:bg-cyan-500/10`;
+    const pendingDeleteClasses = `bg-red-500/20 border-red-500/50 text-red-300`;
+
+    const getDynamicClasses = () => {
+        if (isPendingDeletion) return pendingDeleteClasses;
+        if (isActive) return activeClasses;
+        return inactiveClasses;
+    };
 
     return (
       <div
-        onClick={() => !isRenaming && selectCanvas(canvas.id)}
-        onDoubleClick={() => setIsRenaming(true)}
-        className={`flex justify-between items-center px-3 py-2 rounded-md cursor-pointer group transition-all duration-300 relative border border-transparent ${isActive ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-[0_0_15px_var(--glow-color)]' : 'text-cyan-200/70 hover:bg-cyan-500/10'}`}
+        onClick={() => !isRenaming && !isPendingDeletion && selectCanvas(canvas.id)}
+        onDoubleClick={() => !isPendingDeletion && setIsRenaming(true)}
+        className={`${baseClasses} ${getDynamicClasses()}`}
       >
         {isRenaming ? (
             <input
@@ -56,23 +92,40 @@ const CanvasItem: React.FC<CanvasItemProps> = ({ canvas, isActive }) => {
                 onKeyDown={handleKeyDown}
                 className="w-full bg-transparent text-cyan-200 outline-none border border-cyan-500 rounded-sm px-1 text-sm"
             />
+        ) : isPendingDeletion ? (
+          <div className="flex justify-between items-center w-full">
+            <span className="text-sm font-semibold animate-pulse">Delete?</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCancelDelete}
+                className="p-1 text-cyan-300/80 hover:text-cyan-200"
+                aria-label="Cancel deletion"
+              >
+                 ✕
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="p-1 text-green-400 hover:text-green-300 disabled:opacity-50"
+                aria-label="Confirm deletion"
+              >
+                {isDeleting ? <LoadingSpinnerIcon className="w-4 h-4" /> : <CheckIcon className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
         ) : (
           <>
             <span className="truncate pr-2 text-sm">{canvas.name}</span>
             <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => setIsRenaming(true)} className="p-1 mr-1 text-cyan-400/70 hover:text-cyan-300">
+                <button onClick={(e) => { e.stopPropagation(); setIsRenaming(true); }} className="p-1 mr-1 text-cyan-400/70 hover:text-cyan-300">
                     <PencilIcon className="w-3 h-3"/>
                 </button>
                 <button 
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        if(window.confirm(`Are you sure you want to delete "${canvas.name}"?`)){
-                            deleteCanvas(canvas.id);
-                        }
-                    }} 
-                    className="p-1 text-cyan-500/50 hover:text-red-400 text-xs"
+                    onClick={handleInitiateDelete} 
+                    className="p-1 text-cyan-500/50 hover:text-red-400"
+                    aria-label={`Delete ${canvas.name}`}
                 >
-                ✕
+                  <TrashIcon className="w-4 h-4" />
                 </button>
             </div>
           </>
@@ -97,7 +150,7 @@ export const FileExplorerPanel: React.FC = () => {
       </div>
       
       <button
-        onClick={createCanvas}
+        onClick={() => createCanvas()}
         className="w-full text-center bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-2 px-4 rounded-md transition-all mb-4 text-sm"
       >
         + New Canvas

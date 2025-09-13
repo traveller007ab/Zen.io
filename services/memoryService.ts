@@ -10,8 +10,9 @@ import { Memory } from '../types';
 export async function createMemory(content: string): Promise<void> {
   try {
     // Step 1: Call the 'embed' edge function to get the vector embedding.
+    // Specify the taskType for storing a document.
     const { data: embeddingData, error: embeddingError } = await supabase.functions.invoke('embed', {
-      body: { text: content },
+      body: { text: content, taskType: 'RETRIEVAL_DOCUMENT' },
     });
 
     if (embeddingError) throw embeddingError;
@@ -41,8 +42,9 @@ export async function createMemory(content: string): Promise<void> {
 export async function searchMemories(queryText: string, limit: number = 3): Promise<Memory[]> {
   try {
     // Step 1: Get the embedding for the query text.
+    // Specify the taskType for a retrieval query.
     const { data: embeddingData, error: embeddingError } = await supabase.functions.invoke('embed', {
-      body: { text: queryText },
+      body: { text: queryText, taskType: 'RETRIEVAL_QUERY' },
     });
 
     if (embeddingError) throw embeddingError;

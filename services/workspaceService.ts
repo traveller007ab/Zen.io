@@ -13,29 +13,39 @@ export async function fetchCanvases(): Promise<Canvas[]> {
     return [];
   }
 
-  // FIX: Perform in-flight data migration for canvases with an outdated schema.
-  // This handles cases where 'content' might be a raw string from a previous
-  // version or null, ensuring it's always an array as the components expect.
+  // Perform in-flight data migration for canvases with an outdated schema.
+  // This prevents crashes when loading data that was saved before new features were added.
   const migratedData = (data || []).map(canvas => {
-    if (!Array.isArray(canvas.content)) {
-      // If content is a string (from old schema), use it. Otherwise, default to empty.
-      const contentValue = typeof canvas.content === 'string' ? canvas.content : '';
-      return {
-        ...canvas,
-        content: [{ type: 'text', content: contentValue }],
-      };
+    let migratedCanvas = { ...canvas };
+
+    // Migrate 'content' from string/null to a valid array structure.
+    if (!Array.isArray(migratedCanvas.content)) {
+      const contentValue = typeof migratedCanvas.content === 'string' ? migratedCanvas.content : '';
+      migratedCanvas.content = [{ type: 'text', content: contentValue }];
     }
-    return canvas;
+
+    // Ensure all nullable array properties are initialized to prevent crashes.
+    if (!Array.isArray(migratedCanvas.chat_history)) {
+        migratedCanvas.chat_history = [];
+    }
+    if (!Array.isArray(migratedCanvas.task_log)) {
+        migratedCanvas.task_log = [];
+    }
+    if (!Array.isArray(migratedCanvas.output_sources)) {
+        migratedCanvas.output_sources = [];
+    }
+    
+    return migratedCanvas;
   });
 
   return migratedData as Canvas[];
 }
 
-export async function createCanvas(name: string): Promise<Canvas | null> {
-  const initialContent = [{ type: 'text', content: '' }];
+export async function createCanvas(name: string, content?: Canvas['content']): Promise<Canvas | null> {
+  const initialContent = content || [{ type: 'text', content: '' }];
   const { data, error } = await supabase
     .from('canvases')
-    .insert([{ name, content: initialContent, output: '', chat_history: [], output_sources: [] }])
+    .insert([{ name, content: initialContent, output: '', task_log: [], output_sources: [], chat_history: [] }])
     .select()
     .single();
   
@@ -61,7 +71,7 @@ export async function updateCanvas(id: string, updates: Partial<Omit<Canvas, 'id
   return data as Canvas;
 }
 
-export async function deleteCanvas(id: string): Promise<void> {
+export async function deleteCanvas(id: string): Promise<boolean> {
   const { error } = await supabase
     .from('canvases')
     .delete()
@@ -69,5 +79,11 @@ export async function deleteCanvas(id: string): Promise<void> {
 
   if (error) {
     console.error('Error deleting canvas:', error.message);
+    // Add a more specific check for RLS-related errors
+    if (error.message.includes("violates row-level security policy")) {
+        console.error("Hint: This error is likely caused by missing or incorrect Row Level Security (RLS) policies on the 'canvases' table.");
+    }
+    return false;
   }
+  return true;
 }

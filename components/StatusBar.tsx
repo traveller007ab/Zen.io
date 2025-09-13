@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { DatabaseIcon, EmeraldMindIcon, SAFIcon } from './Icons';
@@ -17,7 +18,7 @@ const MemoryStatusIndicator: React.FC<{ status: MemoryStatus }> = ({ status }) =
     const current = config[status];
     return (
         <div className={`flex items-center gap-2 transition-opacity duration-300 ${current.visible ? 'opacity-100' : 'opacity-0'}`}>
-            <EmeraldMindIcon className={`w-3.5 h-3.5 ${current.color} ${status !== 'error' ? 'animate-pulse' : ''}`} />
+            <EmeraldMindIcon className={`w-3.5 h-3.5 ${current.color} ${status === 'searching' || status === 'saving' ? 'animate-pulse' : ''}`} />
             <span className={`font-medium ${current.color}`}>{current.text}</span>
         </div>
     );
@@ -25,14 +26,16 @@ const MemoryStatusIndicator: React.FC<{ status: MemoryStatus }> = ({ status }) =
 
 const SAFStatusIndicator: React.FC<{ status: SAFStatus }> = ({ status }) => {
     const config = {
-        idle: { text: '', visible: false, color: '' },
-        planning: { text: 'SAF: Planning...', visible: true, color: 'text-cyan-400/70' },
-        executing: { text: 'SAF: Executing tool...', visible: true, color: 'text-cyan-400/70' },
+        idle:           { text: '',                          visible: false, color: '',                          animate: false },
+        planning:       { text: 'SAF: Planning...',          visible: true,  color: 'text-cyan-400/70',          animate: true },
+        thinking:       { text: 'SAF: Thinking...',          visible: true,  color: 'text-cyan-400/70',          animate: true },
+        executing_tool: { text: 'SAF: Executing tool...',    visible: true,  color: 'text-cyan-400/70',          animate: true },
+        responding:     { text: 'SAF: Responding...',        visible: true,  color: 'text-cyan-400/70',          animate: true },
     };
     const current = config[status];
     return (
         <div className={`flex items-center gap-2 transition-opacity duration-300 ${current.visible ? 'opacity-100' : 'opacity-0'}`}>
-            <SAFIcon className={`w-3.5 h-3.5 ${current.color} animate-spin`} />
+            <SAFIcon className={`w-3.5 h-3.5 ${current.color} ${current.animate ? 'animate-spin' : ''}`} />
             <span className={`font-medium ${current.color}`}>{current.text}</span>
         </div>
     );
@@ -44,7 +47,7 @@ export const StatusBar: React.FC = () => {
 
   useEffect(() => {
     const checkConnection = async () => {
-      const { error } = await supabase.from('canvases').select('id').limit(0);
+      const { error } = await supabase.from('canvases').select('id').limit(1);
       if (error) {
         setConnectionStatus('error');
       } else {
