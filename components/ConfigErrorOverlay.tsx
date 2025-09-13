@@ -12,7 +12,7 @@ export const ConfigErrorOverlay: React.FC = () => {
                 {/* FIX: Updated the error message to reflect the change from a file-based
                 configuration (`config.ts`) to using environment variables for the API key. */}
                 <p className="text-gray-400 text-sm">
-                    Please set the <code className="bg-gray-700 text-yellow-300 px-1.5 py-0.5 rounded-md text-xs">API_KEY</code> environment variable to enable ZenBot.
+                    Please set the <code className="bg-gray-700 text-yellow-300 px-1.5 py-0.5 rounded-md text-xs">API_KEY</code> environment variable to enable Eldoria.
                 </p>
             </div>
         </div>

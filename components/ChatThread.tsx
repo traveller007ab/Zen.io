@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '../types';
-import { UserIcon, ZenBotLogo, SendIcon } from './Icons';
+import { UserIcon, EldoriaLogo, SendIcon } from './Icons';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface ChatThreadProps {
@@ -14,14 +14,25 @@ const ChatBubble: React.FC<{ message: ChatMessage }> = ({ message }) => {
     const isUser = message.sender === 'user';
     return (
         <div className={`flex items-start gap-3 my-4 ${isUser ? 'justify-end' : ''}`}>
-            {!isUser && <ZenBotLogo className="w-7 h-7 text-cyan-400 shrink-0 mt-1" />}
+            {!isUser && <EldoriaLogo className="w-7 h-7 text-cyan-400 shrink-0 mt-1 text-glow" />}
             <div className={`w-full max-w-xl p-3 rounded-lg text-sm ${isUser ? 'bg-cyan-500/10 text-cyan-200' : 'bg-transparent'}`}>
                 <MarkdownRenderer>{message.text}</MarkdownRenderer>
             </div>
-            {isUser && <UserIcon className="w-7 h-7 text-cyan-200/80 shrink-0 mt-1" />}
+            {isUser && <UserIcon className="w-7 h-7 text-cyan-300/90 shrink-0 mt-1" />}
         </div>
     );
 };
+
+const WelcomeMessage = () => (
+    <div className="text-center p-4 text-cyan-400/80 text-sm border border-cyan-500/20 rounded-lg bg-cyan-900/20 my-4">
+        <EldoriaLogo className="w-8 h-8 mx-auto mb-3 text-cyan-400" />
+        <h3 className="font-semibold text-cyan-300 mb-1 text-glow">Context-Aware Chat</h3>
+        <p>
+            This is your conversational workspace. Ask me questions about the content in the Editor Panel.
+            I can explain code, suggest improvements, or brainstorm ideas based on your current work.
+        </p>
+    </div>
+);
 
 export const ChatThread: React.FC<ChatThreadProps> = ({ messages, isLoading, onSendMessage }) => {
     const [input, setInput] = useState('');
@@ -52,12 +63,13 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ messages, isLoading, onS
     return (
         <div className="flex flex-col h-full overflow-hidden">
             <div className="flex-grow overflow-y-auto custom-scrollbar pr-2">
+                {messages.length === 0 && !isLoading && <WelcomeMessage />}
                 {messages.map((msg, index) => (
                     <ChatBubble key={index} message={msg} />
                 ))}
                  {isLoading && messages[messages.length - 1]?.sender === 'user' && (
                     <div className="flex items-start gap-3 my-4">
-                        <ZenBotLogo className="w-7 h-7 text-cyan-400 shrink-0 mt-1 animate-pulse" />
+                        <EldoriaLogo className="w-7 h-7 text-cyan-400 shrink-0 mt-1 animate-pulse text-glow" />
                         <div className="w-full max-w-xl p-3 rounded-lg text-sm">
                            <div className="h-2 w-4 bg-cyan-400/50 rounded-full animate-pulse"></div>
                         </div>

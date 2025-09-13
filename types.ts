@@ -1,4 +1,3 @@
-
 export interface EmeraldMind {
   description: string;
   capabilities: string[];
@@ -32,8 +31,8 @@ export interface SAF {
   };
 }
 
-export interface ZenBotCore {
-  system: "ZenBot.io";
+export interface EldoriaCore {
+  system: "Eldoria.io";
   core: {
     EmeraldMind: EmeraldMind;
     SAF: SAF;
@@ -46,11 +45,31 @@ export interface ChatMessage {
     text: string;
 }
 
+export interface Source {
+  title: string;
+  uri: string;
+}
+
+export interface TextPart {
+  type: 'text';
+  content: string;
+}
+
+export interface ImagePart {
+  type: 'image';
+  content: string; // base64 data URI
+  mimeType: string;
+}
+
+export type CanvasPart = TextPart | ImagePart;
+
+
 export interface Canvas {
   id: string;
   created_at: string;
   name: string;
-  content: string;
+  content: CanvasPart[];
   output: string;
   chat_history: ChatMessage[] | null;
+  output_sources: Source[] | null;
 }

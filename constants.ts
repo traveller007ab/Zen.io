@@ -1,8 +1,8 @@
 
-import { ZenBotCore } from './types';
+import { EldoriaCore } from './types';
 
-export const ZENBOT_CORE_CONFIG: ZenBotCore = {
-  system: "ZenBot.io",
+export const ELDORIA_CORE_CONFIG: EldoriaCore = {
+  system: "Eldoria.io",
   core: {
     EmeraldMind: {
       description: "A sophisticated cognitive architecture for dynamic data processing and memory management.",

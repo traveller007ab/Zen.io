@@ -1,33 +1,14 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config';
 
 // IMPORTANT: Make sure you have created the 'canvases' table in your Supabase project.
-// If you have an existing table from a previous version, you need to add the chat_history column.
-// You can use the following SQL in the Supabase SQL Editor:
+// If you are migrating from a text-only version to the multi-modal version, you MUST
+// run the following SQL command to update your table structure.
+// This is a non-reversible data migration.
 /*
-  -- 1. Create the table (if you are starting fresh)
-  CREATE TABLE public.canvases (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    name TEXT NOT NULL,
-    content TEXT,
-    output TEXT
-  );
-
-  -- 2. Add the chat history column (if you are upgrading)
+  -- Alters the 'content' column to support storing complex data like text and images.
   ALTER TABLE public.canvases
-  ADD COLUMN chat_history JSONB;
-
-  -- 3. Enable Row Level Security (RLS)
-  ALTER TABLE public.canvases ENABLE ROW LEVEL SECURITY;
-
-  -- 4. Create policies to allow all access for this demo
-  CREATE POLICY "Allow all access"
-  ON public.canvases
-  FOR ALL
-  USING (true)
-  WITH CHECK (true);
+  ALTER COLUMN content TYPE JSONB USING to_jsonb(content);
 */
 
 
