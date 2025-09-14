@@ -1,11 +1,10 @@
 // This is a Deno module for a Supabase Edge Function.
 // It securely fetches the content of a URL provided by the client.
+// This version is dependency-free for maximum stability.
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
-import { Readability } from 'npm:@mozilla/readability@0.5.0';
-import { JSDOM } from 'npm:jsdom@24.1.0';
 
-
+// FIX: Declare Deno global to address TypeScript error "Cannot find name 'Deno'".
 declare const Deno: any;
 
 const corsHeaders = {
@@ -13,13 +12,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Simple HTML to text conversion function
+function htmlToText(html: string): string {
+  // 1. Remove script and style elements
+  let text = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/(script|style)>/gim, '');
+  // 2. Remove all other HTML tags
+  text = text.replace(/<[^>]*>/g, ' ');
+  // 3. Decode common HTML entities
+  text = text.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  // 4. Normalize whitespace
+  text = text.replace(/\s+/g, ' ').trim();
+  return text;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    console.log("Scrape function started.");
+    console.log("Scrape function started (v2 - dependency-free).");
     const { url } = await req.json();
 
     if (!url || typeof url !== 'string') {
@@ -50,24 +62,12 @@ serve(async (req) => {
 
     const htmlContent = await response.text();
     console.log("Step 4: Successfully retrieved HTML content.");
-
-    // Use JSDOM and Readability to parse the HTML and extract the main article content
-    const doc = new JSDOM(htmlContent, { url });
-    const reader = new Readability(doc.window.document);
-    const article = reader.parse();
-
-    let contentToReturn = '';
-    if (article && article.textContent) {
-        contentToReturn = article.textContent;
-        console.log("Step 5: Successfully extracted article content using Readability.");
-    } else {
-        // Fallback for pages where Readability fails
-        contentToReturn = doc.window.document.body.textContent || '';
-        console.log("Step 5 (Fallback): Readability failed, using raw text content.");
-    }
+    
+    const textContent = htmlToText(htmlContent);
+    console.log("Step 5: Successfully extracted text from HTML.");
     
     const MAX_CONTENT_LENGTH = 20000;
-    const finalContent = contentToReturn.substring(0, MAX_CONTENT_LENGTH);
+    const finalContent = textContent.substring(0, MAX_CONTENT_LENGTH);
     console.log(`Step 6: Content truncated to ${finalContent.length} characters.`);
 
     return new Response(JSON.stringify({ content: finalContent }), {

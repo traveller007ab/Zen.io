@@ -1,9 +1,8 @@
 // This is a Deno module for a Supabase Edge Function.
 // It handles CORS and securely generates text embeddings using the Gemini API.
+// This version is dependency-free, using a direct fetch call for maximum stability.
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
-// Use npm specifier for Deno to import the Google AI SDK
-import { GoogleGenAI } from 'npm:@google/genai@1.19.0';
 
 // FIX: Declare Deno global to address TypeScript error "Cannot find name 'Deno'".
 declare const Deno: any;
@@ -14,13 +13,12 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // This is needed to handle CORS preflight requests.
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    console.log("Embed function started.");
+    console.log("Embed function started (v2 - REST API).");
 
     const API_KEY = Deno.env.get('API_KEY');
     if (!API_KEY) {
@@ -41,27 +39,40 @@ serve(async (req) => {
     
     const MAX_TEXT_LENGTH = 8000;
     const truncatedText = text.length > MAX_TEXT_LENGTH ? text.substring(0, MAX_TEXT_LENGTH) : text;
-
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
     const model = 'text-embedding-004';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${API_KEY}`;
     
-    // This is the correct, robust structure for the embedContent API call.
-    const content = { parts: [{ text: truncatedText }] };
-    let embedding;
+    const requestBody = {
+      content: {
+        parts: [{ text: truncatedText }],
+      },
+      taskType: taskType,
+    };
 
+    let embedding;
     try {
-      console.log("Step 4: Attempting to call Gemini API for embedding...");
-      const result = await ai.models.embedContent({
-        model: model,
-        content: content,
-        taskType: taskType,
+      console.log("Step 4: Attempting to call Gemini REST API for embedding...");
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
       });
-      embedding = result.embedding.values;
-      console.log("Step 5: Successfully received embedding from Gemini API.");
+
+      if (!res.ok) {
+        const errorBody = await res.json();
+        console.error("CRITICAL: Gemini API call failed with status:", res.status, errorBody);
+        throw new Error(`Gemini API error: ${errorBody.error?.message || 'Unknown error'}`);
+      }
+
+      const data = await res.json();
+      embedding = data.embedding.values;
+      console.log("Step 5: Successfully received embedding from Gemini REST API.");
+
     } catch (apiError) {
       console.error("CRITICAL: Gemini API call failed.", apiError);
-      const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
-      throw new Error(`Failed to generate embedding from Gemini API. Reason: ${errorMessage}`);
+      throw new Error(`Failed to generate embedding from Gemini API. Reason: ${apiError.message}`);
     }
 
     return new Response(JSON.stringify({ embedding }), {
