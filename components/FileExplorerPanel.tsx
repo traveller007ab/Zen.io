@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Canvas } from '../types';
-import { EldoriaLogo, PencilIcon, TrashIcon, CheckIcon, LoadingSpinnerIcon, FilesIcon, SAFIcon } from './Icons';
+import { EldoriaLogo, PencilIcon, TrashIcon, CheckIcon, LoadingSpinnerIcon, FilesIcon, SAFIcon, NewSessionIcon, ExportIcon } from './Icons';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { SimulationCorePanel } from './SimulationCorePanel';
 
@@ -101,6 +101,7 @@ const CanvasItem: React.FC<CanvasItemProps> = ({ canvas, isActive }) => {
                 onClick={handleCancelDelete}
                 className="p-1 text-cyan-300/80 hover:text-cyan-200"
                 aria-label="Cancel deletion"
+                title="Cancel Deletion"
               >
                  ✕
               </button>
@@ -109,6 +110,7 @@ const CanvasItem: React.FC<CanvasItemProps> = ({ canvas, isActive }) => {
                 disabled={isDeleting}
                 className="p-1 text-green-400 hover:text-green-300 disabled:opacity-50"
                 aria-label="Confirm deletion"
+                title="Confirm Deletion"
               >
                 {isDeleting ? <LoadingSpinnerIcon className="w-4 h-4" /> : <CheckIcon className="w-4 h-4" />}
               </button>
@@ -118,13 +120,18 @@ const CanvasItem: React.FC<CanvasItemProps> = ({ canvas, isActive }) => {
           <>
             <span className="truncate pr-2 text-sm">{canvas.name}</span>
             <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={(e) => { e.stopPropagation(); setIsRenaming(true); }} className="p-1 mr-1 text-cyan-400/70 hover:text-cyan-300">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setIsRenaming(true); }} 
+                  className="p-1 mr-1 text-cyan-400/70 hover:text-cyan-300"
+                  title="Rename Canvas"
+                >
                     <PencilIcon className="w-3 h-3"/>
                 </button>
                 <button 
                     onClick={handleInitiateDelete} 
                     className="p-1 text-cyan-500/50 hover:text-red-400"
                     aria-label={`Delete ${canvas.name}`}
+                    title="Delete Canvas"
                 >
                   <TrashIcon className="w-4 h-4" />
                 </button>
@@ -157,24 +164,35 @@ const TabButton: React.FC<{
 };
 
 export const FileExplorerPanel: React.FC = () => {
-  const { canvases, activeCanvasId, createCanvas } = useWorkspace();
+  const { canvases, activeCanvas, activeCanvasId, createCanvas } = useWorkspace();
   const [activeTab, setActiveTab] = useState<'files' | 'core'>('files');
   
+  const handleExport = () => {
+    if (!activeCanvas) return;
+    
+    // For simplicity, we'll export only the text parts as a single markdown file.
+    const content = activeCanvas.content
+        .filter(part => part.type === 'text')
+        .map(part => part.content)
+        .join('\n\n---\n\n');
+
+    const sanitizedName = (activeCanvas.name || 'canvas').replace(/[^a-z0-9._-]/gi, '_');
+    const filename = `${sanitizedName}.md`;
+    
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="panel w-full md:w-64 lg:w-72 p-0 flex flex-col shrink-0">
-      <div className="p-4">
-        <div className="flex items-center gap-3 pb-4 mb-4 border-b border-cyan-500/20">
-          <EldoriaLogo className="w-9 h-9 text-cyan-400 text-glow" />
-          <div>
-            <h1 className="text-xl font-bold text-cyan-300 text-glow">
-              Eldoria IDE
-            </h1>
-            <p className="text-xs text-cyan-400/80">AI Agent Workspace</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="px-4 mb-4">
+      <div className="p-4 border-b border-cyan-500/20">
         <div className="flex items-center bg-slate-900/50 p-1 rounded-md border border-cyan-500/20">
           <TabButton
             icon={<FilesIcon className="w-4 h-4" />}
@@ -192,13 +210,25 @@ export const FileExplorerPanel: React.FC = () => {
       </div>
       
       {activeTab === 'files' && (
-        <div className="px-4 pb-4 flex flex-col flex-grow overflow-hidden">
-          <button
-            onClick={() => createCanvas()}
-            className="w-full text-center bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-2 px-4 rounded-md transition-all mb-4 text-sm"
-          >
-            + New Canvas
-          </button>
+        <div className="px-4 py-4 flex flex-col flex-grow overflow-hidden">
+          <div className="flex items-center gap-2 mb-4">
+            <button
+                onClick={() => createCanvas()}
+                title="Create a new blank canvas"
+                className="flex-grow flex items-center justify-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-2 px-4 rounded-md transition-all text-sm"
+              >
+                <NewSessionIcon className="w-4 h-4" />
+                New Canvas
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={!activeCanvas}
+              title="Export active canvas as Markdown"
+              className="p-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ExportIcon className="w-5 h-5" />
+            </button>
+          </div>
 
           <div className="flex-grow overflow-y-auto pr-2">
             <div className="space-y-1">

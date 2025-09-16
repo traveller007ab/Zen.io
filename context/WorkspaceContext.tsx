@@ -12,6 +12,7 @@ type MemoryStatus = 'idle' | 'searching' | 'saving' | 'error';
 interface WorkspaceState {
   canvases: Canvas[];
   activeCanvasId: string | null;
+  isInitialized: boolean; // For initial app load
   isLoading: boolean; // For main generation
   isChatLoading: boolean; // For chat
   isInlineLoading: boolean; // For inline actions
@@ -24,6 +25,7 @@ interface WorkspaceState {
 
 type WorkspaceAction =
   | { type: 'LOAD_CANVASES'; payload: Canvas[] }
+  | { type: 'SET_INITIALIZED'; payload: boolean }
   | { type: 'SET_ACTIVE_CANVAS'; payload: string }
   | { type: 'ADD_CANVAS'; payload: Canvas }
   | { type: 'DELETE_CANVAS'; payload: string }
@@ -41,6 +43,7 @@ type WorkspaceAction =
 const initialState: WorkspaceState = {
   canvases: [],
   activeCanvasId: null,
+  isInitialized: false,
   isLoading: false,
   isChatLoading: false,
   isInlineLoading: false,
@@ -81,6 +84,8 @@ const workspaceReducer = (state: WorkspaceState, action: WorkspaceAction): Works
   switch (action.type) {
     case 'LOAD_CANVASES':
       return { ...state, canvases: action.payload };
+    case 'SET_INITIALIZED':
+      return { ...state, isInitialized: action.payload };
     case 'SET_ACTIVE_CANVAS':
       return { ...state, activeCanvasId: action.payload };
     case 'ADD_CANVAS':
@@ -159,8 +164,12 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
       if (fetchedCanvases.length > 0) {
         dispatch({ type: 'SET_ACTIVE_CANVAS', payload: fetchedCanvases[0].id });
       } else {
-        createCanvas('Quickstart: Autonomous Web Researcher', INITIAL_CANVAS_CONTENT);
+        await createCanvas('Quickstart: Autonomous Web Researcher', INITIAL_CANVAS_CONTENT);
       }
+      // Use a timeout to ensure the splash screen is visible for a minimum duration
+      setTimeout(() => {
+        dispatch({ type: 'SET_INITIALIZED', payload: true });
+      }, 1000);
     };
     loadWorkspace();
   // eslint-disable-next-line react-hooks/exhaustive-deps
