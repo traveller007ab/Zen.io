@@ -52,7 +52,7 @@ const LogEntry: React.FC<{ entry: TaskLogEntry }> = ({ entry }) => {
             </div>
             <div className={`pl-6 text-sm ${entry.type === 'error' ? 'text-red-400' : 'text-sky-200/90'}`}>
                 {contentIsJson ? (
-                    <pre className="whitespace-pre-wrap bg-slate-900/50 p-2 rounded-md text-xs custom-scrollbar">
+                    <pre className="whitespace-pre-wrap bg-slate-900/50 p-2 rounded-md text-xs">
                         <code>{JSON.stringify(JSON.parse(entry.content), null, 2)}</code>
                     </pre>
                 ) : (
@@ -74,7 +74,7 @@ export const TaskPanel: React.FC<TaskPanelProps> = ({ log, isLoading }) => {
   }, [log]);
 
   return (
-    <div ref={scrollRef} className="h-full overflow-y-auto custom-scrollbar pr-2">
+    <div ref={scrollRef} className="h-full overflow-y-auto pr-2">
       {log.map((entry, index) => <LogEntry key={index} entry={entry} />)}
       {isLoading && log.length === 0 && (
          <div className="text-center p-4 text-cyan-400/80 text-sm">

@@ -51,6 +51,21 @@ const initialState: WorkspaceState = {
   safStatus: 'idle',
 };
 
+const INITIAL_CANVAS_CONTENT: CanvasPart[] = [
+    {
+        type: 'text',
+        content: `# Welcome to the Eldoria IDE
+
+I am your hyper-intelligent AI assistant. Here's how to get started:
+
+1.  **Write anything** in this editor. You can ask a question, paste code, or write a story.
+2.  **Add images** using the '+ Add Image' button or by pasting them directly from your clipboard.
+3.  Press the **'⚡ Generate'** button.
+
+I will analyze your input and provide a detailed response in the 'Output' panel. Let's create something amazing together.`
+    }
+];
+
 const workspaceReducer = (state: WorkspaceState, action: WorkspaceAction): WorkspaceState => {
   switch (action.type) {
     case 'LOAD_CANVASES':
@@ -112,22 +127,8 @@ const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefin
 export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(workspaceReducer, initialState);
   const activeCanvas = state.canvases.find(c => c.id === state.activeCanvasId);
-  const updateTimeout = useRef<NodeJS.Timeout | null>(null);
-
-  // Initial Load
-  useEffect(() => {
-    const loadWorkspace = async () => {
-      const fetchedCanvases = await WorkspaceService.fetchCanvases();
-      dispatch({ type: 'LOAD_CANVASES', payload: fetchedCanvases });
-      if (fetchedCanvases.length > 0) {
-        dispatch({ type: 'SET_ACTIVE_CANVAS', payload: fetchedCanvases[0].id });
-      } else {
-        createCanvas();
-      }
-    };
-    loadWorkspace();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // FIX: Replaced `NodeJS.Timeout` with `ReturnType<typeof setTimeout>` for browser compatibility.
+  const updateTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const createCanvas = useCallback(async (name?: string, content?: CanvasPart[]): Promise<Canvas | null> => {
     const newName = name || `New Canvas ${state.canvases.length + 1}`;
@@ -138,6 +139,21 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
     }
     return newCanvas;
   }, [state.canvases.length]);
+
+  // Initial Load
+  useEffect(() => {
+    const loadWorkspace = async () => {
+      const fetchedCanvases = await WorkspaceService.fetchCanvases();
+      dispatch({ type: 'LOAD_CANVASES', payload: fetchedCanvases });
+      if (fetchedCanvases.length > 0) {
+        dispatch({ type: 'SET_ACTIVE_CANVAS', payload: fetchedCanvases[0].id });
+      } else {
+        createCanvas('Welcome', INITIAL_CANVAS_CONTENT);
+      }
+    };
+    loadWorkspace();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectCanvas = (id: string) => {
     dispatch({ type: 'SET_ACTIVE_CANVAS', payload: id });
@@ -165,7 +181,7 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
         if (remainingCanvases.length > 0) {
             dispatch({ type: 'SET_ACTIVE_CANVAS', payload: remainingCanvases[0].id });
         } else {
-            createCanvas();
+            createCanvas('Welcome', INITIAL_CANVAS_CONTENT);
         }
       }
     } else {

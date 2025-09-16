@@ -156,7 +156,7 @@ export const FileExplorerPanel: React.FC = () => {
         + New Canvas
       </button>
 
-      <div className="flex-grow overflow-y-auto pr-2 custom-scrollbar">
+      <div className="flex-grow overflow-y-auto pr-2">
         <div className="space-y-1">
           {canvases.map(canvas => (
             <CanvasItem

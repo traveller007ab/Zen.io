@@ -16,13 +16,17 @@ const App: React.FC = () => {
       <div className="animated-bg"></div>
       <div className="ide-layout">
         <div className="main-content p-4 gap-4">
-            <FileExplorerPanel />
-            <div className="flex-grow flex flex-col md:flex-row h-full gap-4">
+            <div className="opacity-0 animate-fade-in" style={{ animationDelay: '100ms' }}>
+              <FileExplorerPanel />
+            </div>
+            <div className="flex-grow flex flex-col md:flex-row h-full gap-4 opacity-0 animate-fade-in" style={{ animationDelay: '200ms' }}>
               <EditorPanel />
               <OutputPanel />
             </div>
         </div>
-        <StatusBar />
+        <div className="opacity-0 animate-fade-in" style={{ animationDelay: '300ms' }}>
+            <StatusBar />
+        </div>
       </div>
     </div>
   );

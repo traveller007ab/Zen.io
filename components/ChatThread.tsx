@@ -62,7 +62,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ messages, isLoading, onS
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
-            <div className="flex-grow overflow-y-auto custom-scrollbar pr-2">
+            <div className="flex-grow overflow-y-auto pr-2">
                 {messages.length === 0 && !isLoading && <WelcomeMessage />}
                 {messages.map((msg, index) => (
                     <ChatBubble key={index} message={msg} />
@@ -84,7 +84,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ messages, isLoading, onS
                     onKeyDown={handleKeyDown}
                     placeholder="Ask a follow-up question..."
                     rows={1}
-                    className="flex-grow bg-cyan-900/50 border border-cyan-500/30 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none text-sm custom-scrollbar"
+                    className="flex-grow bg-cyan-900/50 border border-cyan-500/30 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none text-sm"
                 />
                 <button onClick={handleSend} disabled={isLoading || !input.trim()} className="p-2 bg-cyan-500/20 hover:bg-cyan-500/30 rounded-md disabled:opacity-50 transition-all">
                     <SendIcon className="w-5 h-5" />

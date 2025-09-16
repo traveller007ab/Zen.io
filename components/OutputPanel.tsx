@@ -5,6 +5,7 @@ import { TaskPanel } from './TaskPanel';
 import { ChatPanel } from './ChatPanel';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Source } from '../types';
+import { EldoriaLogo } from './Icons';
 
 const LoadingIndicator = () => (
     <div className="flex items-center justify-center h-full text-cyan-400">
@@ -21,6 +22,20 @@ const LoadingIndicator = () => (
                 100% { transform: translateX(100%); }
             }
         `}</style>
+    </div>
+);
+
+const IdleOutputDisplay: React.FC = () => (
+    <div className="flex items-center justify-center h-full">
+        <div className="text-center p-8 border border-cyan-500/20 rounded-lg bg-cyan-900/20 max-w-md">
+            <EldoriaLogo className="w-12 h-12 mx-auto mb-4 text-cyan-400 text-glow" />
+            <h3 className="text-xl font-bold text-cyan-300 mb-2 text-glow">Eldoria Awaits Your Command</h3>
+            <p className="text-cyan-400/80 text-sm">
+                Your generated output will appear here. To begin, write a prompt in the
+                <span className="font-bold text-cyan-300"> Editor</span>, then press the
+                <span className="font-bold text-cyan-300"> ⚡ Generate</span> button.
+            </p>
+        </div>
     </div>
 );
 
@@ -111,16 +126,18 @@ export const OutputPanel: React.FC = () => {
         {/* Content Area */}
         <div className="flex-grow p-4 overflow-hidden">
             {activeTab === 'output' && (
-                <div className="h-full overflow-y-auto custom-scrollbar pr-2">
-                    {isLoading && !activeCanvas?.output ? (
+                <div className="h-full overflow-y-auto pr-2">
+                    {isLoading ? (
                         <LoadingIndicator />
-                    ) : (
+                    ) : hasOutput ? (
                         <>
                             <MarkdownRenderer>
                                 {activeCanvas?.output || ''}
                             </MarkdownRenderer>
                             {hasSources && <Sources sources={activeCanvas.output_sources!} />}
                         </>
+                    ) : (
+                        <IdleOutputDisplay />
                     )}
                 </div>
             )}

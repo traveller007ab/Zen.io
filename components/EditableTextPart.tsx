@@ -19,7 +19,8 @@ export const EditableTextPart: React.FC<EditableTextPartProps> = ({ part, partIn
   const { activeCanvas, updateCanvasPart } = useWorkspace();
   const [content, setContent] = useState(part.content);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // FIX: Replaced `NodeJS.Timeout` with `ReturnType<typeof setTimeout>` for browser compatibility.
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
