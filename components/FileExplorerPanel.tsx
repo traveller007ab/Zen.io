@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Canvas } from '../types';
-import { EldoriaLogo, PencilIcon, TrashIcon, CheckIcon, LoadingSpinnerIcon, FilesIcon, SystemIcon } from './Icons';
+import { EldoriaLogo, PencilIcon, TrashIcon, CheckIcon, LoadingSpinnerIcon, FilesIcon, SAFIcon } from './Icons';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { CoreInfoPanel } from './CoreInfoPanel';
+import { SimulationCorePanel } from './SimulationCorePanel';
 
 interface CanvasItemProps {
   canvas: Canvas;
@@ -183,8 +183,8 @@ export const FileExplorerPanel: React.FC = () => {
             onClick={() => setActiveTab('files')}
           />
           <TabButton
-            icon={<SystemIcon className="w-4 h-4" />}
-            label="System Core"
+            icon={<SAFIcon className="w-4 h-4" />}
+            label="Simulation Core"
             isActive={activeTab === 'core'}
             onClick={() => setActiveTab('core')}
           />
@@ -216,7 +216,7 @@ export const FileExplorerPanel: React.FC = () => {
 
       {activeTab === 'core' && (
         <div className="flex-grow overflow-hidden">
-            <CoreInfoPanel />
+            <SimulationCorePanel onSimulationPrepared={() => setActiveTab('files')} />
         </div>
       )}
     </div>
