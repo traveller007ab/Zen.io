@@ -54,15 +54,26 @@ const initialState: WorkspaceState = {
 const INITIAL_CANVAS_CONTENT: CanvasPart[] = [
     {
         type: 'text',
-        content: `# Welcome to the Eldoria IDE
+        content: `# Quickstart: Autonomous Web Researcher
 
-I am your hyper-intelligent AI assistant. Here's how to get started:
+This is a pre-loaded example to demonstrate what I can do. I'm not just a chatbot; I'm an autonomous agent designed to accomplish complex tasks.
 
-1.  **Write anything** in this editor. You can ask a question, paste code, or write a story.
-2.  **Add images** using the '+ Add Image' button or by pasting them directly from your clipboard.
-3.  Press the **'⚡ Generate'** button.
+**Your mission, should you choose to accept it:**
 
-I will analyze your input and provide a detailed response in the 'Output' panel. Let's create something amazing together.`
+Press the **'⚡ Generate'** button now.
+
+I will execute the following plan:
+1.  Use Google Search to find recent, reliable articles about the current state of quantum computing.
+2.  Select the top 3-4 most relevant articles and use the \`fetch_web_content\` tool to read them.
+3.  Analyze the content to identify key companies and their recent breakthroughs.
+4.  Synthesize all the gathered information.
+5.  Use the \`create_new_canvas_with_content\` tool to write a comprehensive report in a new file named "quantum_computing_report.md".
+
+You will see my thought process, the tools I use, and the final result in the 'Task Log' and 'Output' panels.
+
+---
+**PROMPT:**
+Research the current state of quantum computing. Find three key companies in the field, summarize their latest breakthroughs, and compile the findings into a markdown report named 'quantum_computing_report.md'.`
     }
 ];
 
@@ -148,7 +159,7 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
       if (fetchedCanvases.length > 0) {
         dispatch({ type: 'SET_ACTIVE_CANVAS', payload: fetchedCanvases[0].id });
       } else {
-        createCanvas('Welcome', INITIAL_CANVAS_CONTENT);
+        createCanvas('Quickstart: Autonomous Web Researcher', INITIAL_CANVAS_CONTENT);
       }
     };
     loadWorkspace();
@@ -181,7 +192,7 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
         if (remainingCanvases.length > 0) {
             dispatch({ type: 'SET_ACTIVE_CANVAS', payload: remainingCanvases[0].id });
         } else {
-            createCanvas('Welcome', INITIAL_CANVAS_CONTENT);
+            createCanvas('Quickstart: Autonomous Web Researcher', INITIAL_CANVAS_CONTENT);
         }
       }
     } else {

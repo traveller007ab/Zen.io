@@ -119,6 +119,20 @@
       .animate-pulse-glow {
         animation: pulse-glow 2s infinite ease-in-out;
       }
+      
+      @keyframes pulse-glow-mic {
+        0%, 100% {
+          color: var(--glow-color);
+          filter: drop-shadow(0 0 3px var(--glow-color));
+        }
+        50% {
+          color: #a5f3fc; /* lighter cyan */
+          filter: drop-shadow(0 0 8px var(--glow-color));
+        }
+      }
+      .animate-pulse-glow-mic {
+        animation: pulse-glow-mic 1.5s infinite ease-in-out;
+      }
 
       /* Inline Action Toolbar */
       .inline-action-toolbar {

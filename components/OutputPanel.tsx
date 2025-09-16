@@ -27,13 +27,13 @@ const LoadingIndicator = () => (
 
 const IdleOutputDisplay: React.FC = () => (
     <div className="flex items-center justify-center h-full">
-        <div className="text-center p-8 border border-cyan-500/20 rounded-lg bg-cyan-900/20 max-w-md">
+        <div className="text-center p-8 border border-cyan-500/20 rounded-lg bg-cyan-900/20 max-w-md animate-fade-in">
             <EldoriaLogo className="w-12 h-12 mx-auto mb-4 text-cyan-400 text-glow" />
-            <h3 className="text-xl font-bold text-cyan-300 mb-2 text-glow">Eldoria Awaits Your Command</h3>
+            <h3 className="text-xl font-bold text-cyan-300 mb-2 text-glow">Ready to Execute</h3>
             <p className="text-cyan-400/80 text-sm">
-                Your generated output will appear here. To begin, write a prompt in the
-                <span className="font-bold text-cyan-300"> Editor</span>, then press the
-                <span className="font-bold text-cyan-300"> ⚡ Generate</span> button.
+                The <span className="font-bold text-cyan-300">'Quickstart'</span> canvas is loaded in the editor.
+                <br/>
+                Press the <span className="font-bold text-cyan-300">⚡ Generate</span> button to watch the AI agent perform its task.
             </p>
         </div>
     </div>

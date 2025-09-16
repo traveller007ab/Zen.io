@@ -169,7 +169,7 @@ export const FileExplorerPanel: React.FC = () => {
             <h1 className="text-xl font-bold text-cyan-300 text-glow">
               Eldoria IDE
             </h1>
-            <p className="text-xs text-cyan-400/80">Holographic Workspace</p>
+            <p className="text-xs text-cyan-400/80">AI Agent Workspace</p>
           </div>
         </div>
       </div>
