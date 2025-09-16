@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '../types';
 import { UserIcon, EldoriaLogo, SendIcon, MicrophoneIcon, SpeakerOnIcon, SpeakerOffIcon } from './Icons';
@@ -47,12 +46,16 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSpeaking, onSpeak })
 };
 
 const WelcomeMessage = () => (
-    <div className="text-center p-4 text-cyan-400/80 text-sm border border-cyan-500/20 rounded-lg bg-cyan-900/20 my-4">
+    <div className="text-center p-4 text-cyan-400/80 text-sm border border-cyan-500/20 rounded-lg bg-cyan-900/20 my-4 animate-fade-in">
         <EldoriaLogo className="w-8 h-8 mx-auto mb-3 text-cyan-400" />
-        <h3 className="font-semibold text-cyan-300 mb-1 text-glow">Command Console</h3>
-        <p>
-            This is your conversational interface with the agent. After running a task, you can ask me to explain the results, refine the output, or plan the next steps.
+        <h3 className="font-semibold text-cyan-300 mb-2 text-glow">Welcome to the Eldoria AI IDE</h3>
+        <p className="mb-3">
+            This is your command console. I can guide you on how to use the AI agent.
         </p>
+        <div className="text-left bg-cyan-900/50 p-3 rounded-md border border-cyan-500/30">
+           <p className="font-bold text-cyan-200 mb-2">🚀 Your First Mission:</p>
+           <p>The 'Quickstart' canvas is loaded in the editor. To see the AI agent in action, just press the <strong className="text-amber-300">⚡ Generate</strong> button.</p>
+        </div>
     </div>
 );
 
