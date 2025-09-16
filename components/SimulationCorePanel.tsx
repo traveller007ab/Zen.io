@@ -6,19 +6,26 @@ interface SimulationCorePanelProps {
   onSimulationPrepared: () => void;
 }
 
+const EXAMPLE_SIMULATION = {
+  objective: 'Develop a logistics plan for establishing the first self-sufficient human colony on Mars.',
+  parameters: 'Initial crew: 8 astronauts. Mission duration: 700 Sols. Launch vehicle: Reusable super-heavy lift rocket. Key cargo: In-Situ Resource Utilization (ISRU) unit for water/oxygen, modular habitat, solar arrays, hydroponic farm, 3D printer for spare parts.',
+  constraints: 'Maximum payload mass of 150 metric tons per launch. Must achieve self-sufficiency in water and oxygen within 100 Sols. Food production must meet 50% of caloric needs within 200 Sols. Total initial budget: $50 billion.',
+};
+
 const SectionInput: React.FC<{
     label: string;
     value: string;
     onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
     placeholder: string;
-}> = ({ label, value, onChange, placeholder }) => (
+    rows?: number;
+}> = ({ label, value, onChange, placeholder, rows = 3 }) => (
     <div className="mb-4">
         <label className="block text-sm font-semibold text-cyan-300 mb-1.5">{label}</label>
         <textarea
             value={value}
             onChange={onChange}
             placeholder={placeholder}
-            rows={3}
+            rows={rows}
             className="w-full bg-cyan-900/50 border border-cyan-500/30 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm resize-y"
         />
     </div>
@@ -26,9 +33,9 @@ const SectionInput: React.FC<{
 
 export const SimulationCorePanel: React.FC<SimulationCorePanelProps> = ({ onSimulationPrepared }) => {
   const { createCanvas } = useWorkspace();
-  const [objective, setObjective] = useState('');
-  const [parameters, setParameters] = useState('');
-  const [constraints, setConstraints] = useState('');
+  const [objective, setObjective] = useState(EXAMPLE_SIMULATION.objective);
+  const [parameters, setParameters] = useState(EXAMPLE_SIMULATION.parameters);
+  const [constraints, setConstraints] = useState(EXAMPLE_SIMULATION.constraints);
 
   const handleCreateSimulationCanvas = async () => {
     if (!objective.trim()) {
@@ -56,6 +63,18 @@ Based on the simulation brief above, run a detailed analysis. Model the problem,
     onSimulationPrepared(); // Switch tab back to 'files'
   };
 
+  const handleLoadExample = () => {
+      setObjective(EXAMPLE_SIMULATION.objective);
+      setParameters(EXAMPLE_SIMULATION.parameters);
+      setConstraints(EXAMPLE_SIMULATION.constraints);
+  };
+  
+  const handleClear = () => {
+      setObjective('');
+      setParameters('');
+      setConstraints('');
+  };
+
   const isButtonDisabled = !objective.trim();
 
   return (
@@ -65,7 +84,7 @@ Based on the simulation brief above, run a detailed analysis. Model the problem,
             <h2 className="text-lg font-bold text-cyan-300 text-glow">Simulation Core</h2>
         </div>
         <p className="text-sm text-cyan-400/80 mb-4">
-            Define the parameters for a complex problem. The AI will model the scenario, run an analysis, and generate a report with the optimal outcome.
+            Define a complex problem. The AI will model the scenario, run an analysis, and generate a report canvas. Try the Mars Colony example below.
         </p>
         <div className="flex-grow overflow-y-auto pr-2">
             <SectionInput
@@ -73,21 +92,38 @@ Based on the simulation brief above, run a detailed analysis. Model the problem,
                 value={objective}
                 onChange={(e) => setObjective(e.target.value)}
                 placeholder="e.g., Design a more efficient, non-toxic battery chemistry."
+                rows={2}
             />
             <SectionInput
                 label="Parameters & Variables"
                 value={parameters}
                 onChange={(e) => setParameters(e.target.value)}
                 placeholder="e.g., Anode materials: Silicon, Graphene. Cathode materials: LFP, NMC. Electrolyte: Solid-state polymer."
+                rows={4}
             />
             <SectionInput
                 label="Constraints & Rules"
                 value={constraints}
                 onChange={(e) => setConstraints(e.target.value)}
                 placeholder="e.g., Must exceed 500 Wh/kg energy density. Must be stable up to 80°C. Must not use cobalt."
+                rows={4}
             />
         </div>
-        <div className="mt-4 pt-4 border-t border-cyan-500/20">
+        <div className="mt-2 pt-2 border-t border-cyan-500/20">
+            <div className="flex items-center gap-2 mb-2">
+                 <button
+                    onClick={handleLoadExample}
+                    className="flex-1 text-center bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-1.5 px-3 rounded-md transition-all text-xs"
+                >
+                    Load Example
+                </button>
+                 <button
+                    onClick={handleClear}
+                    className="flex-1 text-center bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-1.5 px-3 rounded-md transition-all text-xs"
+                >
+                    Clear Form
+                </button>
+            </div>
              <button
                 onClick={handleCreateSimulationCanvas}
                 disabled={isButtonDisabled}
