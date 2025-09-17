@@ -1,0 +1,16 @@
+{
+  "name": "Eldoria AI IDE",
+  "short_name": "Eldoria",
+  "description": "A powerful AI agent interface built with React and Gemini, featuring a conceptual architecture for memory (EmeraldMind) and logic (SAF).",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#081229",
+  "theme_color": "#081229",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
